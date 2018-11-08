@@ -6,13 +6,11 @@ im_name='3_12_s.bmp';
 
 % TODO: Update library path
 % Add  library paths
-basedir='~/Desenvolupament/UGM/';
-addpath(basedir);
-
-
+basedir='UGM/';
+addpath(genpath(basedir));
 
 %Set model parameters
-%cluster color
+%cluster coloryaou
 K=4; % Number of color clusters (=number of states of hidden variables)
 
 %Pair-wise parameters
@@ -20,7 +18,6 @@ smooth_term=[0.0 2]; % Potts Model
 
 %Load images
 im = imread(im_name);
-
 
 NumFils = size(im,1);
 NumCols = size(im,2);
@@ -36,12 +33,36 @@ NumCols = size(im,2);
 %
 % TODO: define the unary energy term: data_term
 % nodePot = P( color at pixel 'x' | Cluster color 'c' )  
+% im = rgb2gray(im);
+% imshow(im);
+im=double(im);
+x=reshape(im,[size(im,1)*size(im,2) size(im,3)]);
+gmm_color = gmdistribution.fit(x,K);
+mu_color=gmm_color.mu;
 
+data_term=gmm_color.posterior(x);
+% Most probable neighbour 'c'
+[~, c] = max(data_term,[],2);
+
+
+nNodes = NumFils*NumCols;  % Each pixel is a node
+nStates = 4; % 4-neighbourhood
+
+% Standardize Features
+Xstd = UGM_standardizeCols(reshape(x,[1 3 nNodes]),1);
+size(Xstd)
 
 nodePot=[];
-
-
-
+nodePot = zeros(nNodes,nStates);
+% r
+nodePot(:,1,1) = exp(-1-2.5*Xstd(1,1,:));
+nodePot(:,1,2) = 1;
+% g
+nodePot(:,2,1) = exp(-1-2.5*Xstd(1,2,:));
+nodePot(:,2,2) = 1;
+% b
+nodePot(:,3,1) = exp(-1-2.5*Xstd(1,3,:));
+nodePot(:,3,2) = 1;
 %Building 4-grid
 %Build UGM Model for 4-connected segmentation
 disp('create UGM model');

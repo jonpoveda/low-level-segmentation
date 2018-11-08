@@ -7,3 +7,4 @@ function gm=CreateGridOpenGMModel(im,lambda)
 
 
 gm=-1;
+
