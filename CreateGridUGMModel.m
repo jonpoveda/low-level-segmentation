@@ -28,8 +28,11 @@ adj(sub2ind([nNodes nNodes],ind,ind+nRows)) = 1;
 % Add Up/Left Edges
 adj = adj+adj';
 
+% Create edgeStruct and initialise with default parameters
 edgeStruct=[];
 edgeStruct = UGM_makeEdgeStruct(adj,K);
+% We can force more than 100 iterations by changing edgeStruct.maxIter
+
 
 % Standardize Features
 % Xstd = UGM_standardizeCols(reshape(X,[1 1 nNodes]),1);

@@ -11,10 +11,10 @@ addpath(genpath(basedir));
 
 %Set model parameters
 %cluster coloryaou
-K=8; % Number of color clusters (=number of states of hidden variables)
-
+K=10; % Number of color clusters (=number of states of hidden variables)
+nStates = K;
 %Pair-wise parameters
-smooth_term=[0.2 100]; % Potts Model
+smooth_term=[-10 10]; % Potts Model
 
 %Load images
 im = imread(im_name);
@@ -47,7 +47,7 @@ nodePot = data_term;  % According to the definition of 'nodePot' above
 
 
 nNodes = NumFils*NumCols;  % Each pixel is a node
-nStates = 8; % 4-neighbourhood (equal to K (always??)
+%nStates = 4; % 4-neighbourhood (equal to K (always??)
 
 % Standardize Features
 Xstd = UGM_standardizeCols(reshape(x,[1 3 nNodes]),1);
@@ -75,18 +75,27 @@ disp('create UGM model');
 if ~isempty(edgePot)
 
     % color clustering
-    [~,c] = min(reshape(data_term,[NumFils*NumCols K]),[],2);
+    % TODO: find out why there was a minimum applied to a probability
+    %[~,c] = min(reshape(data_term,[NumFils*NumCols K]),[],2);
+    [~,c] = max(reshape(data_term,[NumFils*NumCols K]),[],2);
     im_c= reshape(mu_color(c,:),size(im));
     
     % Call different UGM inference algorithms
-    disp('Loopy Belief Propagation'); tic;
-    [nodeBelLBP,edgeBelLBP,logZLBP] = UGM_Infer_LBP(nodePot,edgePot,edgeStruct);toc;
+    disp('Loopy Belief Propagation'); 
+    tic;
+    
+    edgeStruct.maxIter = int32(200);
+    [nodeBelLBP,edgeBelLBP,logZLBP] = UGM_Infer_LBP(nodePot,edgePot,edgeStruct);
+    toc;
     [~, c_lbp] = max(nodeBelLBP,[],2);
     % Need to convert im_lbp to image dimensions 
     im_lbp = reshape(mu_color(c_lbp,:), size(im));
     
     % Max-sum
-    disp('Max-sum'); tic;
+    disp('Max-sum'); 
+    tic;
+    % Modify default maximum number of iterations
+    edgeStruct.maxIter = int32(200);
     decodeLBP = UGM_Decode_LBP(nodePot,edgePot,edgeStruct);
     im_bp= reshape(mu_color(decodeLBP,:),size(im));
     toc;
