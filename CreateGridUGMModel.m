@@ -46,7 +46,7 @@ for e = 1:edgeStruct.nEdges
    %            | lmbda lmbda   0    lmbda |
    %            | lmbda lmbda  lmbda   0   |
    pot_same = lambda(2) * ones(K,K);
-   pot_same(1:(K+1):end) = 0;
+   pot_same(1:(K+1):end) = lambda(1);
    %pot_same = exp(1.8 + .3*1/(1+abs(Xstd(n1)-Xstd(n2))));
    edgePot(:,:,e) = pot_same; %[pot_same 1;1 pot_same];
 end
