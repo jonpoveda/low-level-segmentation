@@ -35,12 +35,12 @@ NumCols = size(im,2);
 % nodePot = P( color at pixel 'x' | Cluster color 'c' )  
 % im = rgb2gray(im);
 % imshow(im);
-im=double(im);
-x=reshape(im,[size(im,1)*size(im,2) size(im,3)]);
+im = double(im);
+x = reshape(im, [size(im,1)*size(im,2), size(im,3)]);
 gmm_color = gmdistribution.fit(x,K);
-mu_color=gmm_color.mu;
+mu_color = gmm_color.mu;
 
-data_term=gmm_color.posterior(x);
+data_term = gmm_color.posterior(x);
 % Most probable neighbour 'c'
 [~, c] = max(data_term,[],2);
 
@@ -68,7 +68,7 @@ nodePot(:,3,2) = 1;
 disp('create UGM model');
 
 % Create UGM data
-[edgePot,edgeStruct] = CreateGridUGMModel(NumFils, NumCols, K ,smooth_term);
+[edgePot,edgeStruct] = CreateGridUGMModel(NumFils, NumCols, nStates, smooth_term);
 
 
 if ~isempty(edgePot)
