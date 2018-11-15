@@ -2,7 +2,10 @@ clear all;
 close all;
 clc;
 
-im_name='3_12_s.bmp';
+% im_name='3_12_s.bmp';
+% im_name='2_1_s.bmp';
+im_name='7_9_s.bmp';
+toLab = 0;
 
 % TODO: Update library path
 % Add  library paths
@@ -11,7 +14,7 @@ addpath(genpath(basedir));
 
 %Set model parameters
 %cluster coloryaou
-K=10; % Number of color clusters (=number of states of hidden variables)
+K=4; % Number of color clusters (=number of states of hidden variables)
 nStates = K;
 %Pair-wise parameters
 smooth_term=[-10 10]; % Potts Model
@@ -23,11 +26,9 @@ NumFils = size(im,1);
 NumCols = size(im,2);
 
 %Convert to LAB colors space
-% TODO: Uncomment if you want to work in the LAB space
-%
-% im = RGB2Lab(im);
-
-
+if toLab == 1
+  im = RGB2Lab(im);
+end
 
 %Preparing data for GMM fiting
 %
@@ -38,13 +39,16 @@ NumCols = size(im,2);
 im = double(im);
 x = reshape(im, [size(im,1)*size(im,2), size(im,3)]);
 gmm_color = gmdistribution.fit(x,K);
+% In case the covariance matrix is ill composed
+% gmm_color = gmdistribution.fit(x,K, 'CovarianceType', 'diagonal', ...
+%   'SharedCovariance', true);
+
 mu_color = gmm_color.mu;
 
 data_term = gmm_color.posterior(x);
 nodePot = data_term;  % According to the definition of 'nodePot' above
 % Most probable neighbour 'c'
 [~, c] = max(data_term,[],2);
-
 
 nNodes = NumFils*NumCols;  % Each pixel is a node
 %nStates = 4; % 4-neighbourhood (equal to K (always??)
@@ -69,30 +73,36 @@ size(Xstd)
 disp('create UGM model');
 
 % Create UGM data
-[edgePot,edgeStruct] = CreateGridUGMModel(NumFils, NumCols, nStates, smooth_term);
-
+[edgePot,edgeStruct] = CreateGridUGMModel(NumFils, NumCols, nStates,...
+  smooth_term);
 
 if ~isempty(edgePot)
 
-    % color clustering
+    % Color clustering (w/o graphical models)
     % TODO: find out why there was a minimum applied to a probability
     %[~,c] = min(reshape(data_term,[NumFils*NumCols K]),[],2);
+    disp('Colour clustering (w/o GM)');
+    tic;
     [~,c] = max(reshape(data_term,[NumFils*NumCols K]),[],2);
     im_c= reshape(mu_color(c,:),size(im));
+    toc;
     
     % Call different UGM inference algorithms
+    % Loopy Belief Propagation (inference)
     disp('Loopy Belief Propagation'); 
     tic;
-    
     edgeStruct.maxIter = int32(200);
-    [nodeBelLBP,edgeBelLBP,logZLBP] = UGM_Infer_LBP(nodePot,edgePot,edgeStruct);
+%     [nodeBelLBP,edgeBelLBP,logZLBP] = UGM_Infer_LBP(nodePot,edgePot,edgeStruct);
+%     [~, c_lbp] = max(nodeBelLBP,[],2);
+%     toc;
+% Equivalent to the above but slightly faster (thanks to mex)
+    maxOfMarginalsLBPdecode = UGM_Decode_MaxOfMarginals(nodePot,edgePot,...
+      edgeStruct,@UGM_Infer_LBP);
+    im_lbp = reshape(mu_color(maxOfMarginalsLBPdecode,:), size(im));
     toc;
-    [~, c_lbp] = max(nodeBelLBP,[],2);
-    % Need to convert im_lbp to image dimensions 
-    im_lbp = reshape(mu_color(c_lbp,:), size(im));
     
-    % Max-sum
-    disp('Max-sum'); 
+    % Max-sum (decoding)
+    disp('Max-sum (decoding)'); 
     tic;
     % Modify default maximum number of iterations
     edgeStruct.maxIter = int32(200);
@@ -100,24 +110,67 @@ if ~isempty(edgePot)
     im_bp= reshape(mu_color(decodeLBP,:),size(im));
     toc;
     
-    
     % TODO: apply other inference algorithms and compare their performance
     %
-    % - Graph Cut
+    % Tree-reweighted Loopy Belief Propagation (inference)
+    % Super slow!
+%     tic;
+%     edgeStruct.maxIter = 100;
+%     [nodeBelTRBP,edgeBelTRBP,logZTRBP] = UGM_Infer_TRBP(nodePot,edgePot,edgeStruct);
+%     toc;
+%     [~, c_trbp] = max(nodeBelTRBP, [], 2);
+%     im_trbp = reshape(mu_color(c_trbp, :), size(im));
+    
+    % - Graph Cut (cannot use it, we have nStates = K which is > 2)
+    % Alpha-Beta Swap (decoding)
+    disp('Alpha-Beta Swap (decoding)');
+    tic;
+    edgeStruct.maxIter = int32(200);
+    alphaBetaDecode = UGM_Decode_AlphaBetaSwap(nodePot,edgePot,...
+      edgeStruct,@UGM_Decode_GraphCut);
+    im_abd = reshape(mu_color(alphaBetaDecode,:), size(im));
+    toc;
+    
+    % Sampling for Inference (Gibbs Sampler + maximum of marginals)
+    disp('Sampling for Inference (Gibbs Sampler + maximum of marginals)');
+    tic;
+    edgeStruct.maxIter = int32(200);
+    burnIn=1000;  % Generate 'burnIn samples
+    maxOfMarginalsGibbsDecode = UGM_Decode_MaxOfMarginals(nodePot,...
+      edgePot,edgeStruct,@UGM_Infer_Sample,@UGM_Sample_Gibbs,burnIn);
+    im_mmgd=reshape(mu_color(maxOfMarginalsGibbsDecode,:), size(im));
+    toc;
+    
     % - Linear Programing Relaxation
+
+    if (toLab == 1)
+      im = Lab2RGB(im);
+      im_c = Lab2RGB(im_c);
+      im_lbp = Lab2RGB(im_lbp);
+      im_bp = Lab2RGB(im_bp);
+      im_abd = Lab2RGB(im_abd);
+      im_mmgd = Lab2RGB(im_mmgd);
+    end
+        
+    figure('Name', 'Comparison of inference algorithms');
+
+    subplot(2,3,1),imshow(uint8(im));
+    xlabel('Original');
     
-    figure
-    % If we converted to Lab
-%     subplot(2,2,1),imshow(Lab2RGB(im));xlabel('Original');
-%     subplot(2,2,2),imshow(Lab2RGB(im_c),[]);xlabel('Clustering without GM');
-%     subplot(2,2,3),imshow(Lab2RGB(im_bp),[]);xlabel('Max-Sum');
-%     subplot(2,2,4),imshow(Lab2RGB(im_lbp),[]);xlabel('Loopy Belief Propagation');
+    subplot(2,3,2),imshow(uint8(im_c),[]);
+    xlabel('Clustering without GM');
     
-    % If we used RGB
-    subplot(2,2,1),imshow(uint8(im));xlabel('Original');
-    subplot(2,2,2),imshow(uint8(im_c),[]);xlabel('Clustering without GM');
-    subplot(2,2,3),imshow(uint8(im_bp),[]);xlabel('Max-Sum');
-    subplot(2,2,4),imshow(uint8(im_lbp),[]);xlabel('Loopy Belief Propagation');
+    subplot(2,3,3),imshow(uint8(im_bp),[]);
+    xlabel('Max-Sum (decoding)');
+    
+    subplot(2,3,4),imshow(uint8(im_lbp),[]);
+    xlabel('Loopy Belief Propagation');
+    
+    subplot(2,3,5),imshow(uint8(im_abd),[]);
+    xlabel('Alpha-Beta Swap (decoding)');
+    
+    subplot(2,3,6),imshow(uint8(im_mmgd),[]);
+    xlabel('Max-of-marginals (GibbsSample)');
     
 else
    
