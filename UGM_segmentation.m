@@ -7,9 +7,9 @@ basedir='UGM/';
 addpath(genpath(basedir));
 
 %% Load image
-im_name='3_12_s.bmp';
-% im_name='2_1_s.bmp';
-% im_name='7_9_s.bmp';
+%im_name='3_12_s.bmp';
+%im_name='2_1_s.bmp';
+im_name='7_9_s.bmp';
 toLab = 0;
 
 % Load images
@@ -23,17 +23,13 @@ if toLab == 1
 end
 
 %% Set model parameters
-K = 4;    % Number of color clusters (=number of states of hidden variables)
+K = 16;    % Number of color clusters (=number of states of hidden variables)
 nStates = K;
 nNodes = NumFils * NumCols;  % Each pixel is a node
 
 % Pair-wise parameters
-pairwise_model = 4;   % Pairwise model to use (1=> Potts, 2==> Ising,)
-
-if pairwise_model == 1 || pairwise_model == 4
-  smooth_term=[-10 10]; % Potts Model
-end
-
+pairwise_model = 2;   % Pairwise model to use (1=> Potts, 2==> Ising,)
+smooth_term=[-10 10]; % Potts Model
 
 %% Define the unary energy term: data_term
 % nodePot = P( color at pixel 'x' | Cluster color 'c' )
@@ -41,11 +37,12 @@ end
 % imshow(im);
 im = double(im);
 x = reshape(im, [size(im, 1) * size(im, 2), size(im, 3)]);
-gmm_color = gmdistribution.fit(x, K);
+%gmm_color = gmdistribution.fit(x, K);
+%gmm_color = fitgmdist(x, K);
 
 % --- WARNING ---
 % In case the covariance matrix is ill composed
-% gmm_color = gmdistribution.fit(x,K, 'CovarianceType', 'diagonal', ...
+gmm_color = fitgmdist(x, K, 'CovarianceType', 'diagonal');%, ...
 %   'SharedCovariance', true);
 
 mu_color = gmm_color.mu;

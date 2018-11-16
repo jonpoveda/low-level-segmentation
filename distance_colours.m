@@ -6,8 +6,8 @@ function [col_dist] = distance_colours(c1, c2, lab)
 
 if lab
   % Convert RGB colours into Lab space
-  c1_lab = RGB2Lab(c1);
-  c2_lab = RGB2Lab(c2);
+  c1_lab = rgb2lab(c1);
+  c2_lab = rgb2lab(c2);
   
   % Compute mean
   % Compute distance in the Lab space (i.e.: DeltaE distance)

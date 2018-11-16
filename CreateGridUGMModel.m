@@ -38,7 +38,7 @@ edgePot = [];
 edgePot = zeros(K, K, edgeStruct.nEdges);
 
 %% Initialise pairwise model
-if pairwise_model == 1 || pairwise_model == 4
+if pairwise_model == 1 || pairwise_model == 4 || pairwise_model == 5
   % Potts model
   % pot same is a K*K matrix with lambda(1) diagonal and lambda(2) off-diagonal
   % e.g.: K=4  | l(1)  l(2) l(2)	l(2) |
@@ -50,11 +50,11 @@ if pairwise_model == 1 || pairwise_model == 4
   
   if pairwise_model == 4
     % Gaussian parwise potentials (from paper, see below)
-    w_app =  2;         % Weight for the appearance kernel
-    w_smooth =  1;      % Weight for the smoothness kernel
-    theta_alpha = 61;   % Standard deviation for "Nearness" factor
-    theta_beta = 11;    % Standard deviation for "Similarity" factor
-    theta_gamma = 1;     % Standard deviation of the smoothness
+    w_app =  2;           % Weight for the appearance kernel
+    w_smooth =  1;        % Weight for the smoothness kernel
+    theta_alpha = 61;     % Standard deviation for "Nearness" factor
+    theta_beta = 11;      % Standard deviation for "Similarity" factor
+    theta_gamma = 1;      % Standard deviation of the smoothness
     
   end
   
@@ -62,13 +62,18 @@ elseif pairwise_model == 2
   % Constants for Ising model (very important to try a few combinations)
   c1 = 1.8;
   c2 = 0.3;
-  Xstd = UGM_standardizeCols(reshape(im,[1 3 nNodes]),1);
+  Xstd = UGM_standardizeCols(reshape(im, [1, 3, nNodes]), 1);
   
 elseif pairwise_model == 3
   % Potts but with gaussian weighting
   sigma = 2;
   h = fspecial('gaussian', K, sigma);
   
+elseif pairwise_model == 5
+  lambda1 = 5;
+  lambda2 = 0.5;
+  beta = 1;
+  Xstd = UGM_standardizeCols(reshape(im, [1, 3, nNodes]), 1);
 end
 
 %% Compute pairwise model
@@ -93,7 +98,12 @@ for e = 1:edgeStruct.nEdges
       edgePot(:, :, e) = h .* potts_gauss;
       
     case 4
-      % Gaussian Edge Potentials from: 
+      % TODO: check again how the distance part is computed in the paper
+      % Here, since we evaluate each edge separately, the ends will be two
+      % neighbouring pixels and hence the distance will be always equal to
+      % 1.... so every edge gets the same matrix ==> equivalent to Potts
+      % potential with lambda(1) = -lambda(2) with different values...
+      % Gaussian Edge Potentials from:
       %   "Efficient Inference in Fully Connected CRFs with
       %    Gaussian Edge Potentials"
       
@@ -109,15 +119,15 @@ for e = 1:edgeStruct.nEdges
       % Compute distance between pixels
       dist_points = sqrt((x2 - x1)^2 + (y2 - y1)^2);
       % Compute "nearness" exponent
-      nearness = abs(dist_points)^2 / 2 * theta_alpha^2;
+      nearness = abs(dist_points)^2 / (2 * theta_alpha^2);
       
       % Get colour for each edge:
       c1 = im(n1, :);
       c2 = im(n2, :);
       % Compute colour distance ('true' for Lab colourspace, else => RGB)
       colour_dist = distance_colours(c1, c2, true);
-      similarity = abs(colour_dist)^2 / 2 * theta_beta^2;
-      smoothness = abs(dist_points)^2 / 2 * theta_gamma^2;
+      similarity = abs(colour_dist)^2 / (2 * theta_beta^2);
+      smoothness = abs(dist_points)^2 / (2 * theta_gamma^2);
       
       % Compute appearance term
       app_term = exp(-nearness - similarity);
@@ -128,6 +138,15 @@ for e = 1:edgeStruct.nEdges
       
       % Assign potential to current edge
       edgePot(:, :, e) = gauss_edge_potential;
+      
+    case 5
+      % Get edge ends for current edge 'e'
+      n1 = edgeStruct.edgeEnds(e,1);
+      n2 = edgeStruct.edgeEnds(e,2);
+      
+      k_ij = lambda1 + lambda2 * exp(-beta * (abs(Xstd(n1) - Xstd(n2)))^2);
+      
+      edgePot(:, :, e) = potts_potential * k_ij;
       
   end
 end
