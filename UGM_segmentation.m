@@ -3,19 +3,24 @@ close all;
 clc;
 
 % Add  library paths
-basedir='UGM/';
+basedir = 'UGM/';
 addpath(genpath(basedir));
 
-%% Load image
-%im_name='3_12_s.bmp';
-%im_name='2_1_s.bmp';
+%% Load image & its (weakly labelled) GT mask
+% First image (house) => 2 classes + unlabelled class
+% im_name = '3_12_s.bmp';
+% gt = '3_12_s_GT.bmp';
+% im_name='2_1_s.bmp';
+% gt='2_1_s_GT.bmp';
 im_name='7_9_s.bmp';
+gt = '7_9_s_GT.bmp';
 toLab = 0;
 
-% Load images
 im = imread(im_name);
-NumFils = size(im, 1);
+gt = imread(gt);
+NumRows = size(im, 1);
 NumCols = size(im, 2);
+NumChannels = size(im, 3);
 
 % Convert to LAB colors space
 if toLab == 1
@@ -23,27 +28,29 @@ if toLab == 1
 end
 
 %% Set model parameters
-K = 16;    % Number of color clusters (=number of states of hidden variables)
+%eval_results = false; % For all cases where K is different num_clusters
+eval_results = true;  % Only when gt classes = num_clusters!
+K = 5;    % Number of color clusters (=number of states of hidden variables)
 nStates = K;
-nNodes = NumFils * NumCols;  % Each pixel is a node
+nNodes = NumRows * NumCols;  % Each pixel is a node
 
 % Pair-wise parameters
 pairwise_model = 2;   % Pairwise model to use (1=> Potts, 2==> Ising,)
-smooth_term=[-10 10]; % Potts Model
+smooth_term = [-10, 10]; % Potts Model
 
 %% Define the unary energy term: data_term
 % nodePot = P( color at pixel 'x' | Cluster color 'c' )
 % im = rgb2gray(im);
 % imshow(im);
 im = double(im);
-x = reshape(im, [size(im, 1) * size(im, 2), size(im, 3)]);
+x = reshape(im, [NumRows * NumCols, NumChannels]);
 %gmm_color = gmdistribution.fit(x, K);
-%gmm_color = fitgmdist(x, K);
+% gmm_color = fitgmdist(x, K);
 
 % --- WARNING ---
 % In case the covariance matrix is ill composed
 gmm_color = fitgmdist(x, K, 'CovarianceType', 'diagonal');%, ...
-%   'SharedCovariance', true);
+%    'SharedCovariance', true);
 
 mu_color = gmm_color.mu;
 
@@ -59,7 +66,7 @@ nodePot = data_term;  % According to the definition of 'nodePot' above
 disp('create UGM model');
 
 % Create UGM data
-[edgePot,edgeStruct] = CreateGridUGMModel(x, NumFils, NumCols, nStates,...
+[edgePot,edgeStruct] = CreateGridUGMModel(x, NumRows, NumCols, nStates,...
   pairwise_model, smooth_term);
 
 %% Run and compare different inference algorithms
@@ -72,7 +79,15 @@ if ~isempty(edgePot)
   tic;
   % Simply compute maximum of a posteriori probability of pixel 'x'
   % belonging to cluster 'c'
-  [~,c] = max(reshape(data_term, [NumFils * NumCols, K]), [], 2);
+  [~,c] = max(reshape(data_term, [NumRows * NumCols, K]), [], 2);
+  if (eval_results)
+    [iou_clusterGMM] = compute_overlapClass(c, gt, NumRows, NumCols,...
+      NumChannels);
+    fprintf('IoU for clustering without GM (only GMM):\n');
+    for k = 1:K
+      fprintf('\t IoU class %d:  %.2f\n', k, iou_clusterGMM(k));
+    end
+  end
   % Use mean colour of most likely cluster
   im_c = reshape(mu_color(c, :), size(im));
   toc;
@@ -91,6 +106,17 @@ if ~isempty(edgePot)
   
   maxOfMarginalsLBPdecode = UGM_Decode_MaxOfMarginals(nodePot, edgePot,...
     edgeStruct, @UGM_Infer_LBP);
+  
+  if (eval_results)
+    [iou_lbp_infer] = compute_overlapClass(maxOfMarginalsLBPdecode,...
+      gt, NumRows, NumCols, NumChannels);
+    fprintf('IoU for LBP infer\n');
+    for k = 1:K
+      fprintf('\t IoU class %d:  %.2f\n', k, iou_lbp_infer(k));
+    end
+    
+  end
+  
   im_lbp = reshape(mu_color(maxOfMarginalsLBPdecode, :), size(im));
   toc;
   
@@ -101,6 +127,14 @@ if ~isempty(edgePot)
   % Maximum number of iterations
   edgeStruct.maxIter = int32(200);
   decodeLBP = UGM_Decode_LBP(nodePot, edgePot, edgeStruct);
+  if (eval_results)
+    [iou_lbp_decode] = compute_overlapClass(decodeLBP, gt, NumRows,...
+      NumCols, NumChannels);
+    fprintf('IoU for LBP decode:\n');
+    for k = 1:K
+      fprintf('\t IoU class %d:  %.2f\n', k, iou_lbp_decode(k));
+    end
+  end
   im_bp = reshape(mu_color(decodeLBP, :), size(im));
   toc;
   
@@ -115,6 +149,16 @@ if ~isempty(edgePot)
   edgeStruct.maxIter = int32(200);
   alphaBetaDecode = UGM_Decode_AlphaBetaSwap(nodePot, edgePot,...
     edgeStruct, @UGM_Decode_GraphCut);
+  
+  if (eval_results)
+    [iou_alphaBeta] = compute_overlapClass(alphaBetaDecode, gt, NumRows,...
+      NumCols, NumChannels);
+    fprintf('IoU for Alpha Beta:\n');
+    for k = 1:K
+      fprintf('\t IoU class %d:  %.2f\n', k, iou_alphaBeta(k));
+    end
+  end
+  
   im_abd = reshape(mu_color(alphaBetaDecode, :), size(im));
   toc;
   
@@ -126,6 +170,15 @@ if ~isempty(edgePot)
   burnIn = 1000;      % Generate burnIn samples
   maxOfMarginalsGibbsDecode = UGM_Decode_MaxOfMarginals(nodePot,...
     edgePot, edgeStruct, @UGM_Infer_Sample, @UGM_Sample_Gibbs, burnIn);
+  if (eval_results)
+    [iou_gibbsDecode] = compute_overlapClass(maxOfMarginalsGibbsDecode,...
+      gt, NumRows, NumCols, NumChannels);
+    fprintf('IoU for Gibbs Decode:\n');
+    for k = 1:K
+      fprintf('\t IoU class %d:  %.2f\n', k, iou_gibbsDecode(k));
+    end
+  end
+  
   im_mmgd = reshape(mu_color(maxOfMarginalsGibbsDecode, :), size(im));
   toc;
   
