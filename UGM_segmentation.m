@@ -8,12 +8,12 @@ addpath(genpath(basedir));
 
 %% Load image & its (weakly labelled) GT mask
 % First image (house) => 2 classes + unlabelled class
-% im_name = '3_12_s.bmp';
-% gt = '3_12_s_GT.bmp';
+im_name = '3_12_s.bmp';
+gt = '3_12_s_GT.bmp';
 % im_name='2_1_s.bmp';
 % gt='2_1_s_GT.bmp';
-im_name='7_9_s.bmp';
-gt = '7_9_s_GT.bmp';
+% im_name='7_9_s.bmp';
+% gt = '7_9_s_GT.bmp';
 toLab = 0;
 
 im = imread(im_name);
@@ -30,7 +30,7 @@ end
 %% Set model parameters
 %eval_results = false; % For all cases where K is different num_clusters
 eval_results = true;  % Only when gt classes = num_clusters!
-K = 5;    % Number of color clusters (=number of states of hidden variables)
+K = 2;    % Number of color clusters (=number of states of hidden variables)
 nStates = K;
 nNodes = NumRows * NumCols;  % Each pixel is a node
 
@@ -45,11 +45,11 @@ smooth_term = [-10, 10]; % Potts Model
 im = double(im);
 x = reshape(im, [NumRows * NumCols, NumChannels]);
 %gmm_color = gmdistribution.fit(x, K);
-% gmm_color = fitgmdist(x, K);
+gmm_color = fitgmdist(x, K);
 
 % --- WARNING ---
 % In case the covariance matrix is ill composed
-gmm_color = fitgmdist(x, K, 'CovarianceType', 'diagonal');%, ...
+%gmm_color = fitgmdist(x, K, 'CovarianceType', 'diagonal');%, ...
 %    'SharedCovariance', true);
 
 mu_color = gmm_color.mu;
